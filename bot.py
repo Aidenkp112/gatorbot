@@ -1,14 +1,17 @@
-import traceback
 import discord
 import os
 import json
+import traceback
 from dotenv import load_dotenv
 from discord import app_commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+print("BOT STARTING...")
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
+print("TOKEN LOADED:", TOKEN is not None)
 
 IMAGE_URL = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/86caa92d-e1bf-4f41-99cb-c554002b134c/dlyt1h4-7659f17b-4bff-4b62-b52b-7a6aaf5d241f.png/v1/fit/w_460,h_469,q_70,strp/gator_by_aidenkp11_dlyt1h4-375w-2x.jpg"
 
@@ -22,17 +25,20 @@ CHANNEL_FILE = "channels.json"
 TIME_FILE = "times.json"
 
 
-# ---------------- FILE HELPERS ----------------
+# ---------------- SAFE JSON ----------------
 
 def load_json(file):
     if not os.path.exists(file):
         return {}
-
     try:
         with open(file, "r") as f:
             return json.load(f)
     except:
         return {}
+
+def save_json(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f)
 
 
 # ---------------- SEND IMAGE ----------------
@@ -49,7 +55,7 @@ async def send_image_to_guild(guild_id):
         await channel.send(IMAGE_URL)
 
 
-# ---------------- SAFE SCHEDULER JOB ----------------
+# ---------------- SCHEDULER ----------------
 
 def schedule_guild(guild_id, hour, minute):
     job_id = f"job_{guild_id}"
@@ -62,7 +68,6 @@ def schedule_guild(guild_id, hour, minute):
     async def job():
         await send_image_to_guild(guild_id)
 
-    # SAFE WRAPPER (NO client.loop usage)
     scheduler.add_job(
         lambda: client.loop.create_task(job()),
         "cron",
@@ -79,23 +84,26 @@ def restore_schedules():
         schedule_guild(guild_id, t["hour"], t["minute"])
 
 
-# ---------------- BOT READY ----------------
+# ---------------- READY ----------------
 
 @client.event
 async def on_ready():
     print(f"Logged in as {client.user}")
 
-    await tree.sync()
+    try:
+        await tree.sync()
+        print("Commands synced")
+    except Exception as e:
+        print("SYNC ERROR:", e)
 
     scheduler.start()
     restore_schedules()
 
-    print("gator ready")
+    print("Bot fully ready")
 
 
 # ---------------- COMMANDS ----------------
 
-# 🔹 set channel
 @tree.command(name="setchannel", description="Set image channel")
 async def setchannel(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
@@ -109,7 +117,6 @@ async def setchannel(interaction: discord.Interaction):
     await interaction.response.send_message("channel set", ephemeral=True)
 
 
-# 🔹 set time
 @tree.command(name="settime", description="Set daily image time")
 @app_commands.describe(hour="0-23", minute="0-59")
 async def settime(interaction: discord.Interaction, hour: int, minute: int):
@@ -129,8 +136,7 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
     )
 
 
-# 🔹 force send image
-@tree.command(name="sendimage", description="Force sends Gator image")
+@tree.command(name="sendimage", description="Force send image now")
 async def sendimage(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("nope!", ephemeral=True)
@@ -142,7 +148,6 @@ async def sendimage(interaction: discord.Interaction):
 
 # ---------------- RUN BOT ----------------
 
-print("TOKEN LOADED:", TOKEN is not None)
 try:
     client.run(TOKEN)
 except Exception:
