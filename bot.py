@@ -1,3 +1,4 @@
+import traceback
 import discord
 import os
 import json
@@ -26,12 +27,12 @@ TIME_FILE = "times.json"
 def load_json(file):
     if not os.path.exists(file):
         return {}
-    with open(file, "r") as f:
-        return json.load(f)
 
-def save_json(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f)
+    try:
+        with open(file, "r") as f:
+            return json.load(f)
+    except:
+        return {}
 
 
 # ---------------- SEND IMAGE ----------------
@@ -141,4 +142,8 @@ async def sendimage(interaction: discord.Interaction):
 
 # ---------------- RUN BOT ----------------
 
-client.run(TOKEN)
+print("TOKEN LOADED:", TOKEN is not None)
+try:
+    client.run(TOKEN)
+except Exception:
+    traceback.print_exc()
