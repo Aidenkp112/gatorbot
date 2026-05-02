@@ -1,12 +1,10 @@
 import discord
 import os
 import json
-import threading
 import traceback
 from dotenv import load_dotenv
 from discord import app_commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from flask import Flask
 
 print("BOT STARTING...")
 
@@ -16,22 +14,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 print("TOKEN LOADED:", TOKEN is not None)
 
 IMAGE_URL = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/86caa92d-e1bf-4f41-99cb-c554002b134c/dlyt1h4-7659f17b-4bff-4b62-b52b-7a6aaf5d241f.png/v1/fit/w_460,h_469,q_70,strp/gator_by_aidenkp11_dlyt1h4-375w-2x.jpg"
-
-# ---------------- WEB SERVER (REQUIRED FOR RENDER) ----------------
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Bot is running"
-
-def run_web():
-    app.run(host="0.0.0.0", port=10000)
-
-threading.Thread(target=run_web).start()
-
-
-# ---------------- DISCORD BOT ----------------
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -96,10 +78,14 @@ def schedule_guild(guild_id, hour, minute):
 
 
 def restore_schedules():
-    times = load_json(TIME_FILE)
+    try:
+        times = load_json(TIME_FILE)
 
-    for guild_id, t in times.items():
-        schedule_guild(guild_id, t["hour"], t["minute"])
+        for guild_id, t in times.items():
+            schedule_guild(guild_id, t["hour"], t["minute"])
+    except Exception as e:
+        print("RESTORE ERROR:", e)
+        traceback.print_exc()
 
 
 # ---------------- READY ----------------
@@ -113,9 +99,14 @@ async def on_ready():
         print("Commands synced")
     except Exception as e:
         print("SYNC ERROR:", e)
+        traceback.print_exc()
 
-    scheduler.start()
-    restore_schedules()
+    try:
+        scheduler.start()
+        restore_schedules()
+    except Exception as e:
+        print("SCHEDULER ERROR:", e)
+        traceback.print_exc()
 
     print("Bot fully ready")
 
@@ -164,9 +155,10 @@ async def sendimage(interaction: discord.Interaction):
     await interaction.response.send_message("gator sent", ephemeral=True)
 
 
-# ---------------- RUN BOT ----------------
+# ---------------- RUN BOT (DEBUG SAFE) ----------------
 
 try:
     client.run(TOKEN)
-except Exception:
+except Exception as e:
+    print("CRASH ERROR:", e)
     traceback.print_exc()
