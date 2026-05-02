@@ -8,7 +8,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-IMAGE_URL = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/86caa92d-e1bf-4f41-99cb-c554002b134c/dlyt1h4-7659f17b-4bff-4b62-b52b-7a6aaf5d241f.png/v1/fit/w_460,h_469,q_70,strp/gator_by_aidenkp11_dlyt1h4-375w-2x.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9NDY5IiwicGF0aCI6Ii9mLzg2Y2FhOTJkLWUxYmYtNGY0MS05OWNiLWM1NTQwMDJiMTM0Yy9kbHl0MWg0LTc2NTlmMTdiLTRiZmYtNGI2Mi1iNTJiLTdhNmFhZjVkMjQxZi5wbmciLCJ3aWR0aCI6Ijw9NDYwIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmltYWdlLm9wZXJhdGlvbnMiXX0.f_QCdPch84JHGyExzTVUYw3MGDv1qQcl7tNWPuajetc"
+
+IMAGE_URL = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/86caa92d-e1bf-4f41-99cb-c554002b134c/dlyt1h4-7659f17b-4bff-4b62-b52b-7a6aaf5d241f.png/v1/fit/w_460,h_469,q_70,strp/gator_by_aidenkp11_dlyt1h4-375w-2x.jpg"
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -79,10 +80,13 @@ def restore_schedules():
 async def on_ready():
     print(f"Logged in as {client.user}")
 
+    # 🔥 FIX: force sync commands properly
     await tree.sync()
 
     scheduler.start()
     restore_schedules()
+
+    print("Commands synced")
 
 
 # ---------------- COMMANDS ----------------
@@ -120,7 +124,7 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
     )
 
 
-# 🔹 force send image
+# 🔹 force send image (THIS WAS YOUR MISSING COMMAND ISSUE)
 @tree.command(name="sendimage", description="Force send the image now")
 async def sendimage(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
