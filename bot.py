@@ -1,6 +1,7 @@
 import discord
 import os
 import json
+import asyncio
 import traceback
 from dotenv import load_dotenv
 from discord import app_commands
@@ -83,8 +84,7 @@ def restore_schedules():
 
         for guild_id, t in times.items():
             schedule_guild(guild_id, t["hour"], t["minute"])
-    except Exception as e:
-        print("RESTORE ERROR:", e)
+    except Exception:
         traceback.print_exc()
 
 
@@ -93,6 +93,9 @@ def restore_schedules():
 @client.event
 async def on_ready():
     print(f"Logged in as {client.user}")
+
+    # 🔥 FIX: prevents Discord 429 rate limit spam
+    await asyncio.sleep(5)
 
     try:
         await tree.sync()
@@ -155,10 +158,9 @@ async def sendimage(interaction: discord.Interaction):
     await interaction.response.send_message("gator sent", ephemeral=True)
 
 
-# ---------------- RUN BOT (DEBUG SAFE) ----------------
+# ---------------- RUN BOT ----------------
 
 try:
     client.run(TOKEN)
-except Exception as e:
-    print("CRASH ERROR:", e)
+except Exception:
     traceback.print_exc()
