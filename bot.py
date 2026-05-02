@@ -1,166 +1,96 @@
 import discord
+from discord.ext import commands, tasks
 import os
-import json
 import asyncio
-import traceback
-from dotenv import load_dotenv
-from discord import app_commands
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from flask import Flask
+from threading import Thread
 
-print("BOT STARTING...")
+# ========================
+# KEEP-ALIVE WEB SERVER
+# ========================
+app = Flask(__name__)
 
-load_dotenv()
+@app.route('/')
+def home():
+    return "Bot is alive"
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-print("TOKEN LOADED:", TOKEN is not None)
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
-IMAGE_URL = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/86caa92d-e1bf-4f41-99cb-c554002b134c/dlyt1h4-7659f17b-4bff-4b62-b52b-7a6aaf5d241f.png/v1/fit/w_460,h_469,q_70,strp/gator_by_aidenkp11_dlyt1h4-375w-2x.jpg"
+def keep_alive():
+    t = Thread(target=run_web)
+    t.start()
+
+# ========================
+# DISCORD BOT SETUP
+# ========================
+TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
-tree = app_commands.CommandTree(client)
+intents.message_content = True
 
-scheduler = AsyncIOScheduler()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-CHANNEL_FILE = "channels.json"
-TIME_FILE = "times.json"
-
-
-# ---------------- SAFE JSON ----------------
-
-def load_json(file):
-    if not os.path.exists(file):
-        return {}
-    try:
-        with open(file, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_json(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f)
-
-
-# ---------------- SEND IMAGE ----------------
-
-async def send_image_to_guild(guild_id):
-    channels = load_json(CHANNEL_FILE)
-    channel_id = channels.get(str(guild_id))
-
-    if not channel_id:
-        return
-
-    channel = client.get_channel(int(channel_id))
-    if channel:
-        await channel.send(IMAGE_URL)
-
-
-# ---------------- SCHEDULER ----------------
-
-def schedule_guild(guild_id, hour, minute):
-    job_id = f"job_{guild_id}"
-
-    try:
-        scheduler.remove_job(job_id)
-    except:
-        pass
-
-    async def job():
-        await send_image_to_guild(guild_id)
-
-    scheduler.add_job(
-        lambda: client.loop.create_task(job()),
-        "cron",
-        hour=hour,
-        minute=minute,
-        id=job_id
-    )
-
-
-def restore_schedules():
-    try:
-        times = load_json(TIME_FILE)
-
-        for guild_id, t in times.items():
-            schedule_guild(guild_id, t["hour"], t["minute"])
-    except Exception:
-        traceback.print_exc()
-
-
-# ---------------- READY ----------------
-
-@client.event
+# ========================
+# SAFE STARTUP (ANTI-RATE LIMIT)
+# ========================
+@bot.event
 async def on_ready():
-    print(f"Logged in as {client.user}")
+    print(f"✅ Logged in as {bot.user}")
 
-    # 🔥 FIX: prevents Discord 429 rate limit spam
-    await asyncio.sleep(5)
+# ========================
+# COMMANDS
+# ========================
+
+@bot.command()
+async def ping(ctx):
+    await ctx.send("Pong!")
+
+@bot.command()
+async def say(ctx, *, message):
+    await ctx.send(message)
+
+@bot.command()
+async def forcepic(ctx):
+    await ctx.send("https://picsum.photos/300")
+
+# ========================
+# BACKGROUND TASK (SAFE)
+# ========================
+@tasks.loop(minutes=10)  # NOT spammy
+async def periodic_task():
+    print("Running scheduled task...")
+
+@periodic_task.before_loop
+async def before_task():
+    await bot.wait_until_ready()
+
+# ========================
+# MAIN START (CRITICAL FIX)
+# ========================
+async def main():
+    keep_alive()  # start web server
+
+    await asyncio.sleep(15)  
+    # ⬆️ prevents instant Cloudflare 1015
+
+    if not TOKEN:
+        print("❌ TOKEN NOT FOUND")
+        return
 
     try:
-        await tree.sync()
-        print("Commands synced")
-    except Exception as e:
-        print("SYNC ERROR:", e)
-        traceback.print_exc()
+        await bot.start(TOKEN)
+    except discord.HTTPException as e:
+        print(f"❌ HTTP ERROR: {e}")
+        await asyncio.sleep(60)  # wait if rate limited
 
-    try:
-        scheduler.start()
-        restore_schedules()
-    except Exception as e:
-        print("SCHEDULER ERROR:", e)
-        traceback.print_exc()
-
-    print("Bot fully ready")
-
-
-# ---------------- COMMANDS ----------------
-
-@tree.command(name="setchannel", description="Set image channel")
-async def setchannel(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("nope!", ephemeral=True)
-        return
-
-    channels = load_json(CHANNEL_FILE)
-    channels[str(interaction.guild.id)] = interaction.channel.id
-    save_json(CHANNEL_FILE, channels)
-
-    await interaction.response.send_message("channel set", ephemeral=True)
-
-
-@tree.command(name="settime", description="Set daily image time")
-@app_commands.describe(hour="0-23", minute="0-59")
-async def settime(interaction: discord.Interaction, hour: int, minute: int):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("nope!", ephemeral=True)
-        return
-
-    times = load_json(TIME_FILE)
-    times[str(interaction.guild.id)] = {"hour": hour, "minute": minute}
-    save_json(TIME_FILE, times)
-
-    schedule_guild(interaction.guild.id, hour, minute)
-
-    await interaction.response.send_message(
-        f"time set to {hour:02d}:{minute:02d}",
-        ephemeral=True
-    )
-
-
-@tree.command(name="sendimage", description="Force send image now")
-async def sendimage(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("nope!", ephemeral=True)
-        return
-
-    await interaction.channel.send(IMAGE_URL)
-    await interaction.response.send_message("gator sent", ephemeral=True)
-
-
-# ---------------- RUN BOT ----------------
+# ========================
+# RUN
+# ========================
+print("🚀 BOT STARTING...")
 
 try:
-    client.run(TOKEN)
-except Exception:
-    traceback.print_exc()
+    asyncio.run(main())
+except Exception as e:
+    print(f"CRASH: {e}")
