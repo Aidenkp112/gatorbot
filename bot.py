@@ -2,9 +2,8 @@ import discord
 import os
 import json
 from dotenv import load_dotenv
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from discord import app_commands
-from datetime import time
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 load_dotenv()
 
@@ -19,10 +18,9 @@ scheduler = AsyncIOScheduler()
 
 CHANNEL_FILE = "channels.json"
 TIME_FILE = "times.json"
-LOG_FILE = "logs.txt"
 
 
-# ---------------- STORAGE ----------------
+# ---------------- FILE HELPERS ----------------
 
 def load_json(file):
     if not os.path.exists(file):
@@ -35,14 +33,9 @@ def save_json(file, data):
         json.dump(data, f)
 
 
-def log(msg):
-    with open(LOG_FILE, "a") as f:
-        f.write(msg + "\n")
-
-
 # ---------------- SEND FUNCTION ----------------
 
-async def send_to_guild(guild_id):
+async def send_image_to_guild(guild_id):
     channels = load_json(CHANNEL_FILE)
     channel_id = channels.get(str(guild_id))
 
@@ -52,30 +45,26 @@ async def send_to_guild(guild_id):
     channel = client.get_channel(int(channel_id))
     if channel:
         await channel.send(IMAGE_URL)
-        log(f"Sent image to guild {guild_id}")
 
 
-# ---------------- SCHEDULER SETUP ----------------
+# ---------------- SCHEDULER ----------------
 
 def schedule_guild(guild_id, hour, minute):
     job_id = f"job_{guild_id}"
 
-    # remove old job if exists
     try:
         scheduler.remove_job(job_id)
     except:
         pass
 
     scheduler.add_job(
-        lambda: client.loop.create_task(send_to_guild(guild_id)),
+        lambda: client.loop.create_task(send_image_to_guild(guild_id)),
         "cron",
         hour=hour,
         minute=minute,
         id=job_id
     )
 
-
-# ---------------- LOAD EXISTING SETTINGS ----------------
 
 def restore_schedules():
     times = load_json(TIME_FILE)
@@ -96,28 +85,28 @@ async def on_ready():
     restore_schedules()
 
 
-# ---------------- SET CHANNEL ----------------
+# ---------------- COMMANDS ----------------
 
-@tree.command(name="setchannel", description="Set daily image channel")
+# 🔹 set channel
+@tree.command(name="setchannel", description="Set image channel")
 async def setchannel(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Admin only", ephemeral=True)
+        await interaction.response.send_message("nope!", ephemeral=True)
         return
 
     channels = load_json(CHANNEL_FILE)
     channels[str(interaction.guild.id)] = interaction.channel.id
     save_json(CHANNEL_FILE, channels)
 
-    await interaction.response.send_message("✅ Channel set!", ephemeral=True)
+    await interaction.response.send_message("channel set", ephemeral=True)
 
 
-# ---------------- SET TIME ----------------
-
+# 🔹 set time
 @tree.command(name="settime", description="Set daily image time")
 @app_commands.describe(hour="0-23", minute="0-59")
 async def settime(interaction: discord.Interaction, hour: int, minute: int):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Admin only", ephemeral=True)
+        await interaction.response.send_message("nope!", ephemeral=True)
         return
 
     times = load_json(TIME_FILE)
@@ -127,10 +116,21 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
     schedule_guild(interaction.guild.id, hour, minute)
 
     await interaction.response.send_message(
-        f"⏰ Set to {hour:02d}:{minute:02d}", ephemeral=True
+        f"time set to {hour:02d}:{minute:02d}", ephemeral=True
     )
 
 
-# ---------------- RUN ----------------
+# 🔹 force send image
+@tree.command(name="sendimage", description="Force send the image now")
+async def sendimage(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("nope!", ephemeral=True)
+        return
+
+    await interaction.channel.send(IMAGE_URL)
+    await interaction.response.send_message("gator sent", ephemeral=True)
+
+
+# ---------------- RUN BOT ----------------
 
 client.run(TOKEN)
