@@ -2,30 +2,17 @@ import discord
 from discord.ext import commands, tasks
 import os
 import asyncio
-from flask import Flask
-from threading import Thread
+import logging
 
 # ========================
-# KEEP-ALIVE WEB SERVER
+# LOGGING (IMPORTANT FOR RENDER)
 # ========================
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is alive"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-def keep_alive():
-    t = Thread(target=run_web)
-    t.start()
+logging.basicConfig(level=logging.INFO)
 
 # ========================
-# DISCORD BOT SETUP
+# BOT SETUP
 # ========================
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")  # safer naming
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -33,16 +20,23 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ========================
-# SAFE STARTUP (ANTI-RATE LIMIT)
+# EVENTS
 # ========================
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
+    print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+
+@bot.event
+async def on_disconnect():
+    print("⚠️ Bot disconnected from Discord")
+
+@bot.event
+async def on_resumed():
+    print("🔄 Bot session resumed")
 
 # ========================
 # COMMANDS
 # ========================
-
 @bot.command()
 async def ping(ctx):
     await ctx.send("Pong!")
@@ -58,39 +52,37 @@ async def forcepic(ctx):
 # ========================
 # BACKGROUND TASK (SAFE)
 # ========================
-@tasks.loop(minutes=10)  # NOT spammy
+@tasks.loop(minutes=10)
 async def periodic_task():
-    print("Running scheduled task...")
+    print("📡 Running scheduled task...")
 
 @periodic_task.before_loop
 async def before_task():
     await bot.wait_until_ready()
 
 # ========================
-# MAIN START (CRITICAL FIX)
+# MAIN START (PROPER WAY)
 # ========================
 async def main():
-    keep_alive()  # start web server
-
-    await asyncio.sleep(15)  
-    # ⬆️ prevents instant Cloudflare 1015
-
     if not TOKEN:
-        print("❌ TOKEN NOT FOUND")
-        return
+        raise RuntimeError("❌ DISCORD_TOKEN not found in environment variables")
+
+    periodic_task.start()
 
     try:
         await bot.start(TOKEN)
-    except discord.HTTPException as e:
-        print(f"❌ HTTP ERROR: {e}")
-        await asyncio.sleep(60)  # wait if rate limited
+    except discord.LoginFailure:
+        print("❌ Invalid token")
+    except Exception as e:
+        print(f"❌ Bot crashed: {e}")
 
 # ========================
-# RUN
+# ENTRY POINT
 # ========================
-print("🚀 BOT STARTING...")
+if __name__ == "__main__":
+    print("🚀 BOT STARTING...")
 
-try:
-    asyncio.run(main())
-except Exception as e:
-    print(f"CRASH: {e}")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("👋 Bot shutting down")
