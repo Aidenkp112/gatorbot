@@ -34,7 +34,7 @@ def save_json(file, data):
         json.dump(data, f)
 
 
-# ---------------- SEND FUNCTION ----------------
+# ---------------- SEND IMAGE ----------------
 
 async def send_image_to_guild(guild_id):
     channels = load_json(CHANNEL_FILE)
@@ -48,7 +48,7 @@ async def send_image_to_guild(guild_id):
         await channel.send(IMAGE_URL)
 
 
-# ---------------- SCHEDULER ----------------
+# ---------------- SAFE SCHEDULER JOB ----------------
 
 def schedule_guild(guild_id, hour, minute):
     job_id = f"job_{guild_id}"
@@ -58,8 +58,12 @@ def schedule_guild(guild_id, hour, minute):
     except:
         pass
 
+    async def job():
+        await send_image_to_guild(guild_id)
+
+    # SAFE WRAPPER (NO client.loop usage)
     scheduler.add_job(
-        lambda: client.loop.create_task(send_image_to_guild(guild_id)),
+        lambda: client.loop.create_task(job()),
         "cron",
         hour=hour,
         minute=minute,
@@ -80,13 +84,12 @@ def restore_schedules():
 async def on_ready():
     print(f"Logged in as {client.user}")
 
-    # 🔥 FIX: force sync commands properly
     await tree.sync()
 
     scheduler.start()
     restore_schedules()
 
-    print("Commands synced")
+    print("gator ready")
 
 
 # ---------------- COMMANDS ----------------
@@ -120,12 +123,13 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
     schedule_guild(interaction.guild.id, hour, minute)
 
     await interaction.response.send_message(
-        f"time set to {hour:02d}:{minute:02d}", ephemeral=True
+        f"time set to {hour:02d}:{minute:02d}",
+        ephemeral=True
     )
 
 
-# 🔹 force send image (THIS WAS YOUR MISSING COMMAND ISSUE)
-@tree.command(name="sendimage", description="Force send the image now")
+# 🔹 force send image
+@tree.command(name="sendimage", description="Force sends Gator image")
 async def sendimage(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("nope!", ephemeral=True)
