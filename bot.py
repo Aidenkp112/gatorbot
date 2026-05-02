@@ -1,10 +1,12 @@
 import discord
 import os
 import json
+import threading
 import traceback
 from dotenv import load_dotenv
 from discord import app_commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from flask import Flask
 
 print("BOT STARTING...")
 
@@ -14,6 +16,22 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 print("TOKEN LOADED:", TOKEN is not None)
 
 IMAGE_URL = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/86caa92d-e1bf-4f41-99cb-c554002b134c/dlyt1h4-7659f17b-4bff-4b62-b52b-7a6aaf5d241f.png/v1/fit/w_460,h_469,q_70,strp/gator_by_aidenkp11_dlyt1h4-375w-2x.jpg"
+
+# ---------------- WEB SERVER (REQUIRED FOR RENDER) ----------------
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
+
+threading.Thread(target=run_web).start()
+
+
+# ---------------- DISCORD BOT ----------------
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
